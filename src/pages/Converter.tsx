@@ -170,8 +170,27 @@ const Converter: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  const downloadAll = () => {
-    results.forEach(downloadResult);
+  const downloadAll = async () => {
+    const zip = new JSZip();
+    
+    results.forEach((result) => {
+      // Decode base64 and add to zip
+      const binaryData = atob(result.data);
+      const bytes = new Uint8Array(binaryData.length);
+      for (let i = 0; i < binaryData.length; i++) {
+        bytes[i] = binaryData.charCodeAt(i);
+      }
+      zip.file(result.filename, bytes);
+    });
+    
+    // Generate and download the ZIP
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(zipBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `converted_sessions_${Date.now()}.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const formatOptions = Object.entries(SESSION_FORMATS).filter(([key]) => key !== sourceFormat);
