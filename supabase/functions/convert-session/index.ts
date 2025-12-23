@@ -83,17 +83,17 @@ async function processFile(
     for (const targetFormat of targetFormats) {
       const baseName = file.name.replace(/\.[^/.]+$/, '');
       
-      // For tdata format, create proper structure with multiple files
+      // For tdata/desktop format - output raw session data for use with AndroidTelePorter/opentele
+      // Proper TData requires AES encryption + Qt serialization which needs Python libraries
       if (targetFormat === 'desktop') {
-        const tdataFiles = createTdataFiles(sessionData, baseName);
+        const rawSession = createRawSessionForTdata(sessionData, baseName);
         
-        // Return tdata as a JSON structure that frontend can zip
         results.push({
           format: targetFormat,
-          filename: `${baseName}_tdata.zip`,
-          data: btoa(JSON.stringify({ files: tdataFiles, baseName })),
-          size: 0,
-          isTdata: true,
+          filename: `${baseName}_session_raw.json`,
+          data: btoa(rawSession),
+          size: rawSession.length,
+          isRawSession: true,
         });
       } else {
         const converted = convertToFormat(sessionData, targetFormat);
@@ -333,40 +333,15 @@ function createPyrogramSession(session: SessionData): string {
   return createTelethonSession(session);
 }
 
-// Create tdata file structure as array of files with paths and base64 content
-function createTdataFiles(session: SessionData, baseName: string): TdataFile[] {
-  const keyId = generateKeyId();
-  const files: TdataFile[] = [];
-  
-  // key_datas file
-  const keyDatas = createKeyDatasFile(session);
-  files.push({
-    path: `${baseName}/tdata/key_datas`,
-    data: btoa(String.fromCharCode(...keyDatas)),
-  });
-  
-  // DC key file (e.g., D877F783D5D3EF8C)
-  const dcKey = createDcKeyFile(session);
-  files.push({
-    path: `${baseName}/tdata/${keyId}`,
-    data: btoa(String.fromCharCode(...dcKey)),
-  });
-  
-  // DC key file with 's' suffix
-  const dcKeyS = createDcKeyFileS(session);
-  files.push({
-    path: `${baseName}/tdata/${keyId}s`,
-    data: btoa(String.fromCharCode(...dcKeyS)),
-  });
-  
-  // maps file in subfolder
-  const maps = createMapsFile(session, keyId);
-  files.push({
-    path: `${baseName}/tdata/${keyId}/maps`,
-    data: btoa(String.fromCharCode(...maps)),
-  });
-  
-  return files;
+// Create raw session JSON for use with AndroidTelePorter/opentele Python libraries
+function createRawSessionForTdata(session: SessionData, baseName: string): string {
+  return JSON.stringify({
+    name: baseName,
+    dc_id: session.dc_id,
+    auth_key: bytesToHex(session.auth_key),
+    user_id: session.user_id || null,
+    note: "Use this with AndroidTelePorter or opentele Python library to generate proper TData format. Example: AndroidSession.from_manual(auth_key=bytes.fromhex(auth_key), dc_id=dc_id, user_id=user_id).to_tdata('output')"
+  }, null, 2);
 }
 
 function generateKeyId(): string {
