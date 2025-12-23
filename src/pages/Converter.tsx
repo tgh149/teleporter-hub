@@ -16,9 +16,11 @@ import {
   X, 
   Check,
   Loader2,
-  ArrowRight
+  ArrowRight,
+  Archive
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import JSZip from 'jszip';
 
 const Converter: React.FC = () => {
   const { user } = useAuth();
@@ -70,8 +72,32 @@ const Converter: React.FC = () => {
     setResults([]);
 
     try {
-      // Read files as base64
-      const fileDataPromises = files.map(file => {
+      // Read files as base64, handle ZIP files specially
+      const fileDataPromises = files.map(async (file) => {
+        const isZip = file.name.toLowerCase().endsWith('.zip');
+        
+        if (isZip) {
+          // Extract ZIP contents
+          const zip = new JSZip();
+          const zipData = await zip.loadAsync(file);
+          const zipContents: { name: string; data: string }[] = [];
+          
+          for (const [filename, zipEntry] of Object.entries(zipData.files)) {
+            if (!zipEntry.dir) {
+              const content = await zipEntry.async('base64');
+              zipContents.push({ name: filename, data: content });
+            }
+          }
+          
+          return {
+            name: file.name,
+            data: '',
+            isZip: true,
+            zipContents,
+          };
+        }
+        
+        // Regular file
         return new Promise<{ name: string; data: string }>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => {
@@ -177,13 +203,13 @@ const Converter: React.FC = () => {
                 : 'border-border hover:border-primary/50 hover:bg-muted/30'
             )}
           >
-            <input
+          <input
               type="file"
               multiple
               onChange={handleFileSelect}
               className="hidden"
               id="file-upload"
-              accept=".session,.json,.txt,.tdata"
+              accept=".session,.json,.txt,.tdata,.zip"
             />
             <label htmlFor="file-upload" className="cursor-pointer">
               <Upload className="w-10 h-10 mx-auto text-muted-foreground mb-3" />
@@ -191,7 +217,7 @@ const Converter: React.FC = () => {
                 {dragOver ? 'Drop files here' : 'Click or drag files to upload'}
               </p>
               <p className="text-sm text-muted-foreground mt-1">
-                Supports .session, .json, .txt, .tdata files
+                Supports .session, .json, .txt, .tdata, .zip files
               </p>
             </label>
           </div>
@@ -205,11 +231,16 @@ const Converter: React.FC = () => {
                   className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border border-border/50"
                 >
                   <div className="flex items-center gap-3">
-                    <FileText className="w-5 h-5 text-muted-foreground" />
+                    {file.name.toLowerCase().endsWith('.zip') ? (
+                      <Archive className="w-5 h-5 text-muted-foreground" />
+                    ) : (
+                      <FileText className="w-5 h-5 text-muted-foreground" />
+                    )}
                     <div>
                       <p className="text-sm font-medium text-foreground">{file.name}</p>
                       <p className="text-xs text-muted-foreground">
                         {(file.size / 1024).toFixed(2)} KB
+                        {file.name.toLowerCase().endsWith('.zip') && ' (ZIP archive)'}
                       </p>
                     </div>
                   </div>
