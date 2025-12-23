@@ -160,7 +160,32 @@ const Converter: React.FC = () => {
     }
   };
 
-  const downloadResult = (result: ConversionResult) => {
+  const downloadResult = async (result: ConversionResult & { isTdata?: boolean }) => {
+    // Handle tdata format - create ZIP with folder structure
+    if (result.isTdata) {
+      const tdataInfo = JSON.parse(atob(result.data));
+      const zip = new JSZip();
+      
+      for (const file of tdataInfo.files) {
+        const binaryData = atob(file.data);
+        const bytes = new Uint8Array(binaryData.length);
+        for (let i = 0; i < binaryData.length; i++) {
+          bytes[i] = binaryData.charCodeAt(i);
+        }
+        zip.file(file.path, bytes);
+      }
+      
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = result.filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      return;
+    }
+    
+    // Regular file download
     const blob = new Blob([atob(result.data)], { type: 'application/octet-stream' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -173,15 +198,28 @@ const Converter: React.FC = () => {
   const downloadAll = async () => {
     const zip = new JSZip();
     
-    results.forEach((result) => {
-      // Decode base64 and add to zip
-      const binaryData = atob(result.data);
-      const bytes = new Uint8Array(binaryData.length);
-      for (let i = 0; i < binaryData.length; i++) {
-        bytes[i] = binaryData.charCodeAt(i);
+    for (const result of results) {
+      // Handle tdata format - add folder structure to main zip
+      if ((result as any).isTdata) {
+        const tdataInfo = JSON.parse(atob(result.data));
+        for (const file of tdataInfo.files) {
+          const binaryData = atob(file.data);
+          const bytes = new Uint8Array(binaryData.length);
+          for (let i = 0; i < binaryData.length; i++) {
+            bytes[i] = binaryData.charCodeAt(i);
+          }
+          zip.file(file.path, bytes);
+        }
+      } else {
+        // Regular file
+        const binaryData = atob(result.data);
+        const bytes = new Uint8Array(binaryData.length);
+        for (let i = 0; i < binaryData.length; i++) {
+          bytes[i] = binaryData.charCodeAt(i);
+        }
+        zip.file(result.filename, bytes);
       }
-      zip.file(result.filename, bytes);
-    });
+    }
     
     // Generate and download the ZIP
     const zipBlob = await zip.generateAsync({ type: 'blob' });
